@@ -132,11 +132,8 @@ The GUI shows:
 * SWR
 * frequency
 
-### Add image here
 
-```markdown
 ![CYD touchscreen GUI](images/cyd_gui.jpg)
-```
 
 ---
 
@@ -174,11 +171,8 @@ The Blynk dashboard can:
 | TX1 frequency        | V12         |
 | TX2 frequency        | V13         |
 
-### Add image here
 
-```markdown
 ![Blynk dashboard](images/blynk_dashboard.jpg)
-```
 
 ---
 
@@ -331,10 +325,8 @@ This is more suitable for the 4-layer PCB geometry.
 
 ### Add images here
 
-```markdown
 ![Early microstrip calculation](images/microstrip_wrong.jpg)
 ![Correct 4-layer microstrip calculation](images/microstrip_correct.jpg)
-```
 
 ---
 
@@ -354,9 +346,7 @@ S11 ≈ -10.63 dB at 14.5 MHz
 
 This corresponds to an acceptable but not perfect match.
 
-```markdown
 ![S11 return loss measurement](images/vna_s11_return_loss.jpg)
-```
 
 ---
 
@@ -372,9 +362,8 @@ S21 ≈ -0.46 dB at 14.5 MHz
 
 This shows the through-loss of the relay and microstrip path.
 
-```markdown
 ![S21 insertion loss measurement](images/vna_s21_insertion_loss.jpg)
-```
+
 
 ---
 
@@ -390,9 +379,7 @@ Isolation ≈ -28.43 dB at 14.5 MHz
 
 This shows how much signal leaks into an isolated path.
 
-```markdown
 ![Isolation measurement](images/vna_isolation.jpg)
-```
 
 ---
 
@@ -408,9 +395,8 @@ Crosstalk ≈ -30.46 dB at 14.5 MHz
 
 This shows unwanted coupling between RF paths.
 
-```markdown
 ![Crosstalk measurement](images/vna_crosstalk.jpg)
-```
+
 
 ---
 
