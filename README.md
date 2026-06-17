@@ -7,7 +7,10 @@ This project is a bachelor thesis project focused on the design and development 
 The system allows multiple HF antennas to be switched between two transceiver outputs, while providing local touchscreen control, remote control through Blynk, relay interlock protection, and RF measurement feedback such as forward power, reflected signal, SWR and frequency.
 
 The project combines embedded hardware, RF switching, PCB design, measurement electronics, touchscreen GUI development and remote IoT control.
+---
+![Matrix](images/matrix.jpg)
 
+---
 ---
 
 ## Main Features
