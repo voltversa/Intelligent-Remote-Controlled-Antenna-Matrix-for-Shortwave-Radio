@@ -323,7 +323,6 @@ W ≈ 0.77 mm
 
 This is more suitable for the 4-layer PCB geometry.
 
-### Add images here
 
 ![Early microstrip calculation](images/microstrip_wrong.jpg)
 ![Correct 4-layer microstrip calculation](images/microstrip_correct.jpg)
