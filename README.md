@@ -8,7 +8,7 @@ The system allows multiple HF antennas to be switched between two transceiver ou
 
 The project combines embedded hardware, RF switching, PCB design, measurement electronics, touchscreen GUI development and remote IoT control.
 ---
-![Matrix](images/matrix.jpg)
+![Matrix](images/matrix.jpeg)
 
 ---
 ---
