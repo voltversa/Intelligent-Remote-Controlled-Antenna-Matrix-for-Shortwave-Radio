@@ -1,561 +1,303 @@
-# Intelligent Remote Controlled Antenna Matrix for Shortwave Radio
+# Intelligent Remote-Controlled Antenna Matrix for Shortwave Radio
 
 ## Overview
 
-This project is a bachelor thesis project focused on the design and development of an **intelligent remote-controlled antenna matrix for shortwave radio**.
+This bachelor-thesis project implements an **8-to-2 remotely controlled antenna matrix for HF radio (1.8–30 MHz)**. It combines relay-based RF routing, grounded PARK states, local touchscreen control, Blynk remote control, software interlocks, watchdog supervision, and forward/reflected detector acquisition.
 
-The system allows multiple HF antennas to be switched between two transceiver outputs, while providing local touchscreen control, remote control through Blynk, relay interlock protection, and RF measurement feedback such as forward power, reflected signal, SWR and frequency.
+The completed device is an engineering prototype. Its switching, control, safety-state logic, raw detector acquisition, and selected RF paths have been validated at bench level. Calibrated power/SWR accuracy and continuous 1 kW operation have not yet been qualified.
 
-The project combines embedded hardware, RF switching, PCB design, measurement electronics, touchscreen GUI development and remote IoT control.
----
-![Matrix](images/matrix.jpeg)
+![Final antenna-matrix prototype](images/matrix.jpeg)
 
----
----
+## Original Design Objectives
 
-## Main Features
+The project was developed against the following requirements:
 
-* 8 HF antenna inputs
-* 2 HF transceiver outputs: TX1 and TX2
-* PARK state for unused antennas
-* Relay-based RF switching matrix
-* Interlock protection to prevent unsafe relay combinations
-* TX lock function to prevent switching during transmission
-* Local control using CYD ESP32 touchscreen
-* Remote Android control using Blynk
-* Forward and reflected voltage measurement
-* Estimated forward power calculation
-* SWR calculation
-* Frequency measurement concept using RF pickup and comparator
-* 4-layer PCB design with ground reference plane
-* VNA testing for matching, insertion loss, isolation and crosstalk
-* Mechanical enclosure preparation for N-type RF connectors
+- 8 HF antenna ports and 2 transceiver ports
+- operation from 1.8 to 30 MHz in a 50 Ω system
+- 1 kW continuous-power design objective
+- VSWR ≤ 1.10 and insertion loss ≤ 0.20 dB targets
+- forward and reflected power feedback for both transceivers
+- local control through a CYD ESP32 touchscreen
+- remote control through Blynk
+- safe BUS1, BUS2, and grounded PARK states
+- watchdog and interlock functions
 
----
+These are **design objectives**, not a statement that every value has been achieved or qualified. The measured prototype performance is reported separately below.
 
-## Project Goal
+## Implemented Features
 
-HF radio stations often use multiple antennas for different frequency bands or operating conditions. Manual antenna switching can be inconvenient and error-prone, especially when remote operation is required.
+- 8 antenna inputs and 2 transceiver outputs
+- relay-based BUS1/BUS2 routing
+- fail-safe grounded PARK state for unused antennas
+- central state manager shared by touchscreen, Blynk, and serial control
+- software interlocks that reject conflicting assignments
+- manual TX1/TX2 locks that block switching on the corresponding bus
+- local CYD ESP32 touchscreen interface
+- Blynk remote dashboard with synchronized state
+- two Bruene directional couplers
+- four ADS1115 channels for TX1/TX2 forward and reflected detector voltages
+- provisional power estimation and SWR calculation
+- watchdog and Wi-Fi reconnection handling
+- separate RF and control PCBs in a metal enclosure
 
-The goal of this project is to create a safer and smarter antenna switching system that can:
-
-* select antennas locally or remotely
-* route antennas to TX1 or TX2
-* park unused antennas safely
-* monitor RF conditions
-* reduce the risk of wrong switching, mismatch and high SWR
-
----
+Frequency measurement appeared in an earlier design revision but was removed from the final implementation.
 
 ## System Architecture
 
-The system is built around a **CYD ESP32 touchscreen module**. The ESP32 controls the relay matrix, reads RF measurement values and communicates with the Blynk cloud for remote operation.
-
-Basic architecture:
-
 ```text
-8 HF Antennas
-     |
-     v
-RF Relay Matrix  ---> TX1 / TX2
-     |
-     v
-Bruene Couplers ---> Forward / Reflected Detector Voltages
-     |
-     v
-ADS1115 ADC ---> ESP32 CYD
-                  |
-                  |--> Local Touchscreen GUI
-                  |--> Blynk Remote Dashboard
-                  |--> Relay Control via MCP23017 + ULN Drivers
+8 HF antennas
+      |
+      v
+Selector + ground-clamp relay matrix ----> BUS1 / BUS2
+                                               |
+                                               v
+                                      Bruene couplers
+                                               |
+                                Forward/reflected DC outputs
+                                               |
+                                               v
+                                          ADS1115 ADC
+                                               |
+                                               v
+                                         CYD ESP32
+                                      /      |       \
+                              Touchscreen  Blynk  Relay control
+                                                   |
+                                                   v
+                                         MCP23017 + ULN2803
 ```
 
----
+## Hardware
 
-## Hardware Used
+### RF section
 
-Main hardware components:
+- TE Connectivity Axicom IM06DGR 12 V DPDT relays
+- both relay poles paralleled on each RF path to reduce effective contact resistance and share current
+- separate selector and ground-clamp relay functions
+- Bruene couplers with FT114-43 ferrite toroids
+- adjustable capacitors for bridge balance/directivity tuning
+- 1N5711W Schottky detector diodes
+- N-type bulkhead connectors connected to the PCB by short coaxial pigtails
+- final 2-layer, 1.6 mm FR-4 RF PCB with a continuous bottom ground reference
 
-* CYD ESP32 touchscreen display
-* MCP23017 I/O expander
-* ULN2803 relay driver stage
-* ADS1115 16-bit ADC
-* RF relays
-* Bruene coupler circuits
-* 1N5711 Schottky detector diodes
-* LMV7219 comparator for frequency measurement
-* N-type RF connectors
-* 4-layer RF PCB
-* 12 V supply with local voltage regulation
+The IM06DGR is a practical cost/size/current compromise rather than a dedicated high-power coaxial RF relay. Paralleling its contacts does not by itself prove continuous 1 kW capability.
 
----
+### Control section
 
-## Relay Control
+- CYD ESP32-2432S028R touchscreen module
+- MCP23017 I²C I/O expander
+- ULN2803 relay-driver arrays
+- ADS1115 16-bit I²C ADC
+- 12 V input and local 3.3 V regulation
 
-The antenna matrix supports three main antenna states:
+## Relay Topology and Safe States
 
-| State | Description              |
-| ----- | ------------------------ |
-| BUS1  | Antenna connected to TX1 |
-| BUS2  | Antenna connected to TX2 |
-| PARK  | Antenna parked/grounded  |
+Each antenna supports three logical states:
 
-The firmware uses one central switching function for all control methods:
+| State | Meaning |
+| --- | --- |
+| `BUS1` | Antenna connected to transceiver bus 1 |
+| `BUS2` | Antenna connected to transceiver bus 2 |
+| `PARK` | Antenna disconnected from both buses and grounded |
 
-* touchscreen
-* serial monitor
-* Blynk remote control
+The antenna is connected to the ground-clamp relay common contact. With the clamp coil off, the normally closed contact grounds the unused antenna. When the antenna is selected, the clamp releases it to the selector relay, which routes it to BUS1 or BUS2. This creates a defined grounded state when control power is absent.
 
-This ensures that every switching request goes through the same safety logic.
+All touchscreen, Blynk, and serial requests pass through the same state manager. Before actuating the relays, the firmware:
 
-### Safety Functions
+- accepts only BUS1, BUS2, or PARK assignments
+- rejects conflicting antenna-to-bus combinations
+- parks an existing bus assignment before connecting a replacement
+- applies the manual TX1/TX2 switching locks
+- keeps local and remote state displays synchronized
 
-* Only valid antenna states are allowed
-* Existing antenna on a bus is parked before another antenna is connected
-* TX1 lock blocks switching on BUS1
-* TX2 lock blocks switching on BUS2
-* Remote control cannot bypass the interlock logic
+The TX locks are manual. Automatic RF-presence or PTT-based hot-switch prevention is not implemented.
 
----
+## Local and Remote Interfaces
 
-## Local Touchscreen GUI
-
-The CYD touchscreen provides local control and monitoring.
-
-The GUI shows:
-
-* selected antenna
-* BUS1 antenna
-* BUS2 antenna
-* PARK/BUS state
-* TX1/TX2 lock or status
-* forward voltage
-* reflected voltage
-* estimated power
-* SWR
-* frequency
-
+The CYD touchscreen shows antenna selection, BUS1/BUS2 assignments, PARK state, manual TX locks, and detector-derived values.
 
 ![CYD touchscreen GUI](images/cyd_gui.jpg)
 
----
-
-## Blynk Remote Control
-
-The project also includes a Blynk dashboard for remote Android control.
-
-The Blynk dashboard can:
-
-* select antenna number
-* switch selected antenna to BUS1
-* switch selected antenna to BUS2
-* park selected antenna
-* show BUS1 and BUS2 state
-* show power and SWR values
-* show TX1/TX2 frequency
-* enable or disable TX locks
-
-### Blynk Virtual Pin Mapping
-
-| Function             | Virtual Pin |
-| -------------------- | ----------- |
-| Selected antenna     | V0          |
-| BUS1 button          | V1          |
-| BUS2 button          | V2          |
-| PARK button          | V3          |
-| BUS1 antenna display | V4          |
-| BUS2 antenna display | V5          |
-| TX1 power            | V6          |
-| TX1 SWR              | V7          |
-| TX2 power            | V8          |
-| TX2 SWR              | V9          |
-| TX1 lock             | V10         |
-| TX2 lock             | V11         |
-| TX1 frequency        | V12         |
-| TX2 frequency        | V13         |
-
+The Blynk dashboard provides remote antenna commands and synchronized system status. Remote commands cannot bypass the central interlock logic.
 
 ![Blynk dashboard](images/blynk_dashboard.jpg)
 
----
+### Blynk Virtual Pins
 
-## RF Measurement Principle
+| Function | Virtual pin |
+| --- | ---: |
+| Selected antenna | V0 |
+| BUS1 command | V1 |
+| BUS2 command | V2 |
+| PARK command | V3 |
+| BUS1 antenna display | V4 |
+| BUS2 antenna display | V5 |
+| TX1 power estimate | V6 |
+| TX1 SWR estimate | V7 |
+| TX2 power estimate | V8 |
+| TX2 SWR estimate | V9 |
+| TX1 manual lock | V10 |
+| TX2 manual lock | V11 |
 
-The system estimates forward power and SWR using directional coupler measurements.
+## Forward/Reflected Measurement
 
-A Bruene coupler samples the forward and reflected RF signals. The detector circuit converts the RF samples into DC voltages. These voltages are measured by the ADS1115 and processed by the ESP32.
+Each transceiver path contains a Bruene coupler. The current transformer samples line current, while the capacitive network samples line voltage. Combining these components produces outputs corresponding to the forward and reflected waves. The 1N5711W detector stages convert the RF samples into DC voltages, and the ADS1115 digitizes four channels:
 
-Measurement chain:
+- TX1 forward
+- TX1 reflected
+- TX2 forward
+- TX2 reflected
 
-```text
-RF Signal
-   |
-   v
-Bruene Coupler
-   |
-   v
-Detector Diode + RC Filter
-   |
-   v
-ADS1115 ADC
-   |
-   v
-ESP32 Calculation
-   |
-   v
-CYD Display + Blynk Dashboard
-```
+The four channels were acquired independently and produced stable raw readings during bench testing. This validates the acquisition chain, but it does **not** yet validate wattmeter or SWR accuracy.
 
----
+### Power and SWR Processing
 
-## Power Calculation
+The firmware currently applies provisional conversion coefficients to the detector voltages. The simplified power relationship used during development assumes a nominal 50 Ω system and nominal coupler attenuation, but actual detector response, insertion loss, coupling factor, and diode behavior must be established by calibration.
 
-The firmware estimates forward RF power using the measured forward detector voltage.
-
-The simplified software formula is:
+SWR is derived from the forward/reflected relationship:
 
 ```text
-Pline = 10 × Vforward²
+|Γ| = sqrt(Preflected / Pforward)
+SWR = (1 + |Γ|) / (1 - |Γ|)
 ```
 
-This formula assumes:
+If calibrated detector outputs are proportional to RF voltage rather than power, the corresponding calibrated voltage ratio is used directly for `|Γ|`. The firmware rejects invalid cases such as insufficient forward signal or reflected values outside the valid calibrated range.
 
-* 50 Ω RF system
-* -30 dB coupler
-* detector voltage represents the sampled RF signal
+Until comparison against a known RF power meter and 50 Ω dummy load is complete, displayed power and SWR values should be treated as estimates.
 
-Explanation:
+## RF PCB and 50 Ω Microstrip
 
-```text
-Psample = V² / (2 × 50)
-Psample = V² / 100
+An earlier RF-board revision used a 4-layer stack-up with the reference plane close to the top layer. Its calculated 50 Ω trace width was approximately 0.77 mm. Although theoretically impedance-controlled, the narrow conductor and discontinuities around relay and connector transitions were not suitable for the intended high-power prototype.
 
--30 dB coupler means sampled power is 1000 times smaller
+The final RF board uses:
 
-Pline = Psample × 1000
-Pline = (V² / 100) × 1000
-Pline = 10 × V²
-```
+- 2-layer, 1.6 mm FR-4 construction
+- RF routing on the top layer
+- a continuous ground reference on the bottom layer
+- approximately 2.9 mm microstrip width from the fabricated stack-up calculation (about 50.16 Ω at 30 MHz)
+- ground-via stitching and improved connector/relay transitions
 
-Example:
+![Earlier 4-layer microstrip calculation](images/microstrip_wrong.jpg)
+![Final 2-layer microstrip calculation](images/microstrip_correct.jpg)
 
-```text
-Vforward = 0.84 V
+## RF Validation
 
-Pline = 10 × 0.84²
-Pline ≈ 7.06 W
-```
+Measurements were made over the HF range with a calibrated VNA and 50 Ω terminations. The figures below describe the latest validated markers for the final board; they are not all-path worst-case qualification results.
 
-The power reading is an estimated value and requires final calibration using a known RF power meter and dummy load.
+### Return Loss (S11)
 
----
+The final 2-layer board measured approximately:
 
-## SWR Calculation
+- **S11 ≈ −20 dB below 15 MHz**
+- **S11 ≈ −13 dB at 30 MHz**
+- corresponding VSWR range of approximately **1.22 to 1.58**
 
-SWR is estimated from the forward and reflected detector voltages.
+This is a clear improvement over the earlier 4-layer board, which measured −10.63 dB at 14.5 MHz and degraded toward approximately −7 dB at 30 MHz. The final result is acceptable for the engineering prototype at the lower part of the HF range, while the degradation toward 30 MHz shows that relay, connector, and PCB discontinuities still require improvement.
 
-The reflection coefficient is calculated from the ratio between reflected and forward voltage:
+### Insertion Loss (S21)
 
-```text
-Γ = sqrt(Vreflected / Vforward)
-```
+The latest validated marker is:
 
-Then SWR is calculated as:
+- **S21 ≈ −0.36 dB at 26 MHz**, equivalent to **0.36 dB insertion loss**
 
-```text
-SWR = (1 + Γ) / (1 - Γ)
-```
+This does not meet the original ≤0.20 dB objective and should not be presented as an all-band or all-path worst-case value.
 
-The firmware ignores invalid SWR values when:
+### Isolation (S21)
 
-* forward voltage is too low
-* reflected voltage is higher than forward voltage
-* the detector input is floating
-* no RF signal is present
+The latest validated marker is:
 
-This prevents misleading SWR values such as 99.90 when there is no valid RF measurement.
+- **S21 ≈ −42 dB at 26 MHz**, equivalent to **42 dB isolation**
 
----
+This marker applies to the tested relay/port configuration. Full path-by-path characterization is still required before stating a system-wide worst-case isolation value.
 
-## PCB Design
+### Validated Measurement Summary
 
-The RF board was designed as a 4-layer PCB.
+| Measurement | Latest validated result | Scope |
+| --- | ---: | --- |
+| Return loss | S11 ≈ −20 dB below 15 MHz; ≈ −13 dB at 30 MHz | Final 2-layer board, selected path |
+| Insertion loss | S21 ≈ −0.36 dB at 26 MHz | Marker on tested through-path |
+| Isolation | S21 ≈ −42 dB at 26 MHz | Marker on tested isolated-path configuration |
 
-### Why 4 Layers?
-
-A simple 2-layer PCB was considered, but it had several disadvantages:
-
-* the bottom ground plane would be interrupted by many control and power traces
-* RF return paths would become less predictable
-* 50 Ω traces on a 2-layer 1.6 mm PCB would be much wider
-* routing around relays and connectors would become more difficult
-* more vias and longer routes would increase coupling and layout complexity
-
-The 4-layer PCB allows:
-
-* top layer for RF traces and components
-* inner layer as a solid ground reference plane
-* additional layers for power and control routing
-* improved RF return path
-* better impedance control
-* reduced unwanted coupling and radiation
-
----
-
-## Microstrip Design
-
-The RF traces were designed with a 50 Ω target impedance.
-
-An early version used a trace width calculated for a 2-layer PCB geometry. This resulted in a much wider trace of about 2.88 mm. However, the board was actually a 4-layer stackup, where the reference ground plane is much closer to the top RF trace.
-
-This caused an impedance mismatch.
-
-The trace width was recalculated for the 4-layer stackup:
-
-```text
-Top RF trace
-0.40 mm dielectric
-Inner ground plane
-```
-
-The final target microstrip width was approximately:
-
-```text
-W ≈ 0.77 mm
-```
-
-This is more suitable for the 4-layer PCB geometry.
-
-
-![Early microstrip calculation](images/microstrip_wrong.jpg)
-![Correct 4-layer microstrip calculation](images/microstrip_correct.jpg)
-
----
-
-## VNA Measurements
-
-The RF path was tested using a VNA. The goal was to check matching, insertion loss, isolation and crosstalk.
-
-### 1. Matching / Return Loss
-
-S11 was measured to evaluate how well the selected RF path is matched to 50 Ω.
-
-Measured result:
-
-```text
-S11 ≈ -10.63 dB at 14.5 MHz
-```
-
-This corresponds to an acceptable but not perfect match.
-
-![S11 return loss measurement](images/vna_s11_return_loss.jpg)
-
----
-
-### 2. Insertion Loss
-
-S21 was measured through the selected RF path.
-
-Measured result:
-
-```text
-S21 ≈ -0.46 dB at 14.5 MHz
-```
-
-This shows the through-loss of the relay and microstrip path.
-
-![S21 insertion loss measurement](images/vna_s21_insertion_loss.jpg)
-
-
----
-
-### 3. Isolation
-
-S21 was measured between an active path and an isolated path.
-
-Measured result:
-
-```text
-Isolation ≈ -28.43 dB at 14.5 MHz
-```
-
-This shows how much signal leaks into an isolated path.
-
-![Isolation measurement](images/vna_isolation.jpg)
-
----
-
-### 4. Crosstalk
-
-S21 was measured between neighbouring or unwanted RF paths.
-
-Measured result:
-
-```text
-Crosstalk ≈ -30.46 dB at 14.5 MHz
-```
-
-This shows unwanted coupling between RF paths.
-
-![Crosstalk measurement](images/vna_crosstalk.jpg)
-
-
----
-
-## VNA Measurement Summary
-
-| Measurement    | Parameter | Result at 14.5 MHz | Meaning                        |
-| -------------- | --------: | -----------------: | ------------------------------ |
-| Matching       |       S11 |          -10.63 dB | Acceptable, but not perfect    |
-| Insertion loss |       S21 |           -0.46 dB | Low through-loss for prototype |
-| Isolation      |       S21 |          -28.43 dB | Moderate isolation             |
-| Crosstalk      |       S21 |          -30.46 dB | Unwanted coupling is reduced   |
-
-The VNA results confirm that the RF matrix is functional, but also show that the RF layout can still be improved in a future revision.
-
----
+No newer validated crosstalk value is claimed here. The June crosstalk marker has been removed from the result summary because it belongs to the earlier measurement set.
 
 ## Firmware
 
-The firmware is written for the ESP32 using the Arduino framework.
+The ESP32 firmware uses the Arduino framework and includes:
 
-Main firmware functions:
+- centralized relay state management
+- MCP23017 output control through ULN2803 drivers
+- touchscreen input and status rendering
+- Blynk commands and state synchronization
+- ADS1115 detector acquisition
+- provisional power and SWR processing
+- manual TX locks
+- serial debug commands
+- watchdog supervision
+- Wi-Fi/Blynk reconnection handling
 
-* CYD touchscreen GUI
-* touch input handling
-* relay matrix control
-* interlock protection
-* TX lock handling
-* ADS1115 voltage measurement
-* power calculation
-* SWR calculation
-* frequency counting using ESP32 PCNT
-* Blynk remote control
-* serial debug commands
-* Wi-Fi reconnect logic
+### Serial Commands
 
----
+| Command | Function |
+| --- | --- |
+| `1b1 ... 8b1` | Connect antenna to BUS1 |
+| `1b2 ... 8b2` | Connect antenna to BUS2 |
+| `1p ... 8p` | Park antenna |
+| `allp` | Park all antennas |
+| `state` | Print antenna states |
+| `sel1 ... sel8` | Select antenna in the GUI |
+| `tx1on` / `tx1off` | Enable/disable TX1 manual lock |
+| `tx2on` / `tx2off` | Enable/disable TX2 manual lock |
 
-## Serial Commands
+## Current Validation Status
 
-The firmware supports serial commands for debugging.
+Validated at bench level:
 
-| Command         | Function                |
-| --------------- | ----------------------- |
-| `1b1 ... 8b1`   | Connect antenna to BUS1 |
-| `1b2 ... 8b2`   | Connect antenna to BUS2 |
-| `1p ... 8p`     | Park antenna            |
-| `allp`          | Park all antennas       |
-| `state`         | Print antenna states    |
-| `sel1 ... sel8` | Select antenna in GUI   |
-| `tx1on`         | Lock TX1 switching      |
-| `tx1off`        | Unlock TX1 switching    |
-| `tx2on`         | Lock TX2 switching      |
-| `tx2off`        | Unlock TX2 switching    |
+- 8-to-2 relay switching and grounded PARK behavior
+- local CYD and remote Blynk control
+- shared state management and software interlocks
+- manual TX lock behavior
+- four independent raw detector channels
+- final-board S11 on a selected path
+- the S21 insertion-loss and isolation markers listed above
 
----
+Still requiring qualification:
 
-## Project Status
-
-Completed:
-
-* relay switching logic
-* CYD touchscreen GUI
-* Blynk remote control
-* ADS1115 measurement integration
-* power and SWR calculation
-* frequency measurement concept
-* 4-layer PCB design
-* enclosure machining
-* VNA measurements
-
-Still to improve:
-
-* final RF power calibration
-* high-power 1 kW validation
-* wider RF conductors for lower loss
-* improved impedance matching
-* improved isolation and crosstalk performance
-* improved detector stability on all channels
-* final enclosure assembly
-
----
+- complete all-path RF characterization and repeatability testing
+- calibrated forward power and SWR accuracy
+- automatic RF/PTT interlocking
+- continuous 1 kW thermal, contact-current, and safety testing
+- worst-case isolation and crosstalk across all relay states
 
 ## Lessons Learned
 
-This project showed that RF PCB design requires more than simple schematic design. Important lessons were:
-
-* RF traces need a clean and continuous return path
-* PCB stackup must be known before calculating microstrip width
-* 2-layer and 4-layer microstrip calculations are different
-* relay selection must consider current, voltage, isolation and size
-* detector outputs can float without proper pulldown resistors
-* VNA measurements are essential for verifying RF performance
-* local control must still work even if Wi-Fi is unavailable
-* remote control should never bypass safety logic
-
----
+- The fabricated PCB stack-up must be known before calculating microstrip width.
+- RF traces are transmission lines; relay and connector transitions are part of the impedance path.
+- A continuous, short return path is as important as the RF trace itself.
+- A theoretically correct narrow microstrip can still be a poor practical choice for high-current RF.
+- Relay selection must consider mismatch current, contact resistance, RF behavior, size, and cost.
+- Local and remote commands must use the same interlock logic.
+- Raw detector acquisition is not the same as calibrated RF measurement.
+- Marker results must not be generalized into all-band or all-path specifications.
 
 ## Future Work
 
-Possible improvements for a future version:
-
-* use wider RF conductors or copper areas for high-power paths
-* improve relay transitions and connector transitions
-* use controlled impedance manufacturing
-* add better shielding between RF paths
-* improve physical separation between high-power RF lines
-* calibrate power measurement using a known RF source and dummy load
-* add calibration coefficients in firmware
-* improve Blynk dashboard design
-* add logging of RF measurements
-* perform full high-power testing
-
----
-
-## Repository Structure
-
-Suggested repository structure:
-
-```text
-Antenna-Matrix/
-│
-├── firmware/
-│   └── antenna_matrix_esp32/
-│
-├── hardware/
-│   ├── schematics/
-│   ├── pcb/
-│   └── bom/
-│
-├── measurements/
-│   ├── vna/
-│   └── screenshots/
-│
-├── images/
-│   ├── cyd_gui.jpg
-│   ├── blynk_dashboard.jpg
-│   ├── pcb_layout.jpg
-│   └── enclosure.jpg
-│
-└── README.md
-```
-
----
+- repeat SOLT-calibrated S11/S21 tests for every RF path and relay state
+- document full-band minima, maxima, and relay re-operation repeatability
+- improve relay and connector impedance transitions
+- improve shielding and physical separation between RF paths
+- calibrate both Bruene couplers with a known source, power meter, and dummy load
+- add per-channel calibration coefficients to the firmware
+- implement automatic RF-presence or PTT-based switching inhibition
+- perform supervised high-power thermal and safety testing
 
 ## Disclaimer
 
-This project is a prototype developed for educational purposes as part of a bachelor thesis.
-
-The RF power and SWR measurements are estimated values and require calibration before being used as accurate measurement instruments.
-
-The system has not yet been fully validated for continuous 1 kW RF operation. High-power RF testing should only be performed with proper equipment, dummy loads, safety precautions and supervision.
-
----
+This is an educational engineering prototype. It has not been qualified for continuous unattended operation at 1 kW. Power and SWR displays remain provisional until reference-meter calibration is complete. High-power RF testing requires suitable dummy loads, shielding, measurement equipment, procedures, and supervision.
 
 ## Author
 
 **Mahmoud Mostafa**
-Bachelor thesis 2025/2026
-Electronics-ICT — Embedded Hardware
-Thomas More University of Applied Sciences
+
+- Bachelor thesis 2025/2026
+- Electronics-ICT — Embedded Hardware
+- Thomas More University of Applied Sciences
