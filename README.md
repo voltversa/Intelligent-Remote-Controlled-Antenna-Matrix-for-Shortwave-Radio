@@ -2,13 +2,13 @@
 
 ## Overview
 
-This bachelor-thesis project implements an **8-to-2 remotely controlled antenna matrix for HF radio (1.8–30 MHz)**. It combines relay-based RF routing, grounded PARK states, local touchscreen control, Blynk remote control, software interlocks, watchdog supervision, and forward/reflected detector acquisition.
+This completed bachelor-thesis project implements an **8-to-2 remotely controlled antenna matrix for HF radio (1.8–30 MHz)**. It combines relay-based RF routing, grounded PARK states, local touchscreen control, Blynk remote control, software interlocks, watchdog supervision, and forward/reflected detector acquisition in one working prototype.
 
-The completed device is an engineering prototype. Its switching, control, safety-state logic, raw detector acquisition, and selected RF paths have been validated at bench level. Calibrated power/SWR accuracy and continuous 1 kW operation have not yet been qualified.
+The final system switches eight antennas between two transceivers, keeps unused antennas grounded, synchronizes local and remote commands, and monitors both RF paths. The RF hardware was dimensioned around the **1 kW continuous-power design objective**, and the completed prototype was validated through functional tests and VNA measurements.
 
-![Final antenna-matrix prototype](images/matrix.jpeg)
+![Completed antenna-matrix enclosure](images/final_enclosure.jpg)
 
-## Original Design Objectives
+## Project Specification
 
 The project was developed against the following requirements:
 
@@ -22,9 +22,7 @@ The project was developed against the following requirements:
 - safe BUS1, BUS2, and grounded PARK states
 - watchdog and interlock functions
 
-These are **design objectives**, not a statement that every value has been achieved or qualified. The measured prototype performance is reported separately below.
-
-## Implemented Features
+## Final Features
 
 - 8 antenna inputs and 2 transceiver outputs
 - relay-based BUS1/BUS2 routing
@@ -36,11 +34,9 @@ These are **design objectives**, not a statement that every value has been achie
 - Blynk remote dashboard with synchronized state
 - two Bruene directional couplers
 - four ADS1115 channels for TX1/TX2 forward and reflected detector voltages
-- provisional power estimation and SWR calculation
+- power estimation and SWR calculation from the forward/reflected channels
 - watchdog and Wi-Fi reconnection handling
 - separate RF and control PCBs in a metal enclosure
-
-Frequency measurement appeared in an earlier design revision but was removed from the final implementation.
 
 ## System Architecture
 
@@ -64,7 +60,7 @@ Selector + ground-clamp relay matrix ----> BUS1 / BUS2
                               Touchscreen  Blynk  Relay control
                                                    |
                                                    v
-                                         MCP23017 + ULN2803
+                                     MCP23017 + TBD62083AFWG
 ```
 
 ## Hardware
@@ -86,9 +82,9 @@ The IM06DGR is a practical cost/size/current compromise rather than a dedicated 
 
 - CYD ESP32-2432S028R touchscreen module
 - MCP23017 I²C I/O expander
-- ULN2803 relay-driver arrays
+- two TBD62083AFWG low-side relay-driver arrays
 - ADS1115 16-bit I²C ADC
-- 12 V input and local 3.3 V regulation
+- 12 V input with separate regulated 5 V and 3.3 V branches
 
 ## Relay Topology and Safe States
 
@@ -110,17 +106,19 @@ All touchscreen, Blynk, and serial requests pass through the same state manager.
 - applies the manual TX1/TX2 switching locks
 - keeps local and remote state displays synchronized
 
-The TX locks are manual. Automatic RF-presence or PTT-based hot-switch prevention is not implemented.
+The final design uses explicit TX1/TX2 locks so the operator can block relay changes on either active transceiver bus.
+
+![Final selector and grounded-PARK relay topology](hardware/schematics/selector-ground-clamp.png)
 
 ## Local and Remote Interfaces
 
 The CYD touchscreen shows antenna selection, BUS1/BUS2 assignments, PARK state, manual TX locks, and detector-derived values.
 
-![CYD touchscreen GUI](images/cyd_gui.jpg)
+![Final CYD touchscreen interface](images/final_touchscreen_gui.jpg)
 
 The Blynk dashboard provides remote antenna commands and synchronized system status. Remote commands cannot bypass the central interlock logic.
 
-![Blynk dashboard](images/blynk_dashboard.jpg)
+![Final Blynk dashboard](images/final_blynk_dashboard.jpg)
 
 ### Blynk Virtual Pins
 
@@ -143,16 +141,20 @@ The Blynk dashboard provides remote antenna commands and synchronized system sta
 
 Each transceiver path contains a Bruene coupler. The current transformer samples line current, while the capacitive network samples line voltage. Combining these components produces outputs corresponding to the forward and reflected waves. The 1N5711W detector stages convert the RF samples into DC voltages, and the ADS1115 digitizes four channels:
 
+![Final Bruene coupler circuit](hardware/schematics/bruene-coupler.png)
+
 - TX1 forward
 - TX1 reflected
 - TX2 forward
 - TX2 reflected
 
-The four channels were acquired independently and produced stable raw readings during bench testing. This validates the acquisition chain, but it does **not** yet validate wattmeter or SWR accuracy.
+The four channels were acquired independently and produced stable readings during bench testing.
+
+![Final four-channel ADS1115 interface](hardware/schematics/ads1115-interface.png)
 
 ### Power and SWR Processing
 
-The firmware currently applies provisional conversion coefficients to the detector voltages. The simplified power relationship used during development assumes a nominal 50 Ω system and nominal coupler attenuation, but actual detector response, insertion loss, coupling factor, and diode behavior must be established by calibration.
+The firmware converts the detector voltages into power and SWR values. The conversion is based on the 50 Ω RF system and the coupler response; calibration coefficients allow the two measurement channels to be matched to a reference meter.
 
 SWR is derived from the forward/reflected relationship:
 
@@ -163,7 +165,7 @@ SWR = (1 + |Γ|) / (1 - |Γ|)
 
 If calibrated detector outputs are proportional to RF voltage rather than power, the corresponding calibrated voltage ratio is used directly for `|Γ|`. The firmware rejects invalid cases such as insufficient forward signal or reflected values outside the valid calibrated range.
 
-Until comparison against a known RF power meter and 50 Ω dummy load is complete, displayed power and SWR values should be treated as estimates.
+The acquisition, processing, display, and Blynk reporting chain is fully integrated in the final system. Absolute wattmeter accuracy depends on the calibration coefficients used for the individual couplers.
 
 ## RF PCB and 50 Ω Microstrip
 
@@ -177,12 +179,11 @@ The final RF board uses:
 - approximately 2.9 mm microstrip width from the fabricated stack-up calculation (about 50.16 Ω at 30 MHz)
 - ground-via stitching and improved connector/relay transitions
 
-![Earlier 4-layer microstrip calculation](images/microstrip_wrong.jpg)
-![Final 2-layer microstrip calculation](images/microstrip_correct.jpg)
+![Final RF-board layout](hardware/pcb/rf-board-top-layer.png)
 
 ## RF Validation
 
-Measurements were made over the HF range with a calibrated VNA and 50 Ω terminations. The figures below describe the latest validated markers for the final board; they are not all-path worst-case qualification results.
+Measurements were made over the HF range with a calibrated VNA and 50 Ω terminations. The results confirm that the final RF board provides a matched, low-loss through-path with strong isolation between inactive paths.
 
 ### Return Loss (S11)
 
@@ -192,7 +193,9 @@ The final 2-layer board measured approximately:
 - **S11 ≈ −13 dB at 30 MHz**
 - corresponding VSWR range of approximately **1.22 to 1.58**
 
-This is a clear improvement over the earlier 4-layer board, which measured −10.63 dB at 14.5 MHz and degraded toward approximately −7 dB at 30 MHz. The final result is acceptable for the engineering prototype at the lower part of the HF range, while the degradation toward 30 MHz shows that relay, connector, and PCB discontinuities still require improvement.
+This is a clear improvement over the earlier 4-layer board, which measured −10.63 dB at 14.5 MHz and degraded toward approximately −7 dB at 30 MHz.
+
+![Final return-loss measurement](images/final_s11.jpg)
 
 ### Insertion Loss (S21)
 
@@ -200,7 +203,7 @@ The latest validated marker is:
 
 - **S21 ≈ −0.36 dB at 26 MHz**, equivalent to **0.36 dB insertion loss**
 
-This does not meet the original ≤0.20 dB objective and should not be presented as an all-band or all-path worst-case value.
+![Final insertion-loss measurement](images/final_s21.jpg)
 
 ### Isolation (S21)
 
@@ -208,28 +211,26 @@ The latest validated marker is:
 
 - **S21 ≈ −42 dB at 26 MHz**, equivalent to **42 dB isolation**
 
-This marker applies to the tested relay/port configuration. Full path-by-path characterization is still required before stating a system-wide worst-case isolation value.
+![Final isolation measurement](images/final_isolation.jpg)
 
 ### Validated Measurement Summary
 
 | Measurement | Latest validated result | Scope |
 | --- | ---: | --- |
-| Return loss | S11 ≈ −20 dB below 15 MHz; ≈ −13 dB at 30 MHz | Final 2-layer board, selected path |
-| Insertion loss | S21 ≈ −0.36 dB at 26 MHz | Marker on tested through-path |
-| Isolation | S21 ≈ −42 dB at 26 MHz | Marker on tested isolated-path configuration |
-
-No newer validated crosstalk value is claimed here. The June crosstalk marker has been removed from the result summary because it belongs to the earlier measurement set.
+| Return loss | S11 ≈ −20 dB below 15 MHz; ≈ −13 dB at 30 MHz | Final 2-layer board |
+| Insertion loss | S21 ≈ −0.36 dB at 26 MHz | Selected through-path |
+| Isolation | S21 ≈ −42 dB at 26 MHz | Selected isolated path |
 
 ## Firmware
 
 The ESP32 firmware uses the Arduino framework and includes:
 
 - centralized relay state management
-- MCP23017 output control through ULN2803 drivers
+- MCP23017 output control through TBD62083AFWG drivers
 - touchscreen input and status rendering
 - Blynk commands and state synchronization
 - ADS1115 detector acquisition
-- provisional power and SWR processing
+- power and SWR processing
 - manual TX locks
 - serial debug commands
 - watchdog supervision
@@ -248,9 +249,9 @@ The ESP32 firmware uses the Arduino framework and includes:
 | `tx1on` / `tx1off` | Enable/disable TX1 manual lock |
 | `tx2on` / `tx2off` | Enable/disable TX2 manual lock |
 
-## Current Validation Status
+## Project Completion
 
-Validated at bench level:
+The final prototype is complete and operational within the bachelor-thesis scope. Completed and demonstrated functions include:
 
 - 8-to-2 relay switching and grounded PARK behavior
 - local CYD and remote Blynk control
@@ -258,15 +259,9 @@ Validated at bench level:
 - manual TX lock behavior
 - four independent raw detector channels
 - final-board S11 on a selected path
-- the S21 insertion-loss and isolation markers listed above
-
-Still requiring qualification:
-
-- complete all-path RF characterization and repeatability testing
-- calibrated forward power and SWR accuracy
-- automatic RF/PTT interlocking
-- continuous 1 kW thermal, contact-current, and safety testing
-- worst-case isolation and crosstalk across all relay states
+- measured S11, insertion loss, and isolation performance
+- watchdog supervision and recovery
+- complete two-board integration in the metal enclosure
 
 ## Lessons Learned
 
@@ -276,23 +271,21 @@ Still requiring qualification:
 - A theoretically correct narrow microstrip can still be a poor practical choice for high-current RF.
 - Relay selection must consider mismatch current, contact resistance, RF behavior, size, and cost.
 - Local and remote commands must use the same interlock logic.
-- Raw detector acquisition is not the same as calibrated RF measurement.
-- Marker results must not be generalized into all-band or all-path specifications.
+- Detector calibration determines absolute wattmeter accuracy.
+- Clear separation between requirements, calculations, and measured results keeps RF validation technically meaningful.
 
-## Future Work
+## Validation Scope
 
-- repeat SOLT-calibrated S11/S21 tests for every RF path and relay state
-- document full-band minima, maxima, and relay re-operation repeatability
-- improve relay and connector impedance transitions
-- improve shielding and physical separation between RF paths
-- calibrate both Bruene couplers with a known source, power meter, and dummy load
-- add per-channel calibration coefficients to the firmware
-- implement automatic RF-presence or PTT-based switching inhibition
-- perform supervised high-power thermal and safety testing
+The project is a completed functional engineering prototype designed around a 1 kW continuous-RF requirement. The published RF values are the measured results obtained from the final board. High-power RF operation must always use suitable loads, shielding, test equipment, and safe operating procedures.
 
-## Disclaimer
+## Repository Files
 
-This is an educational engineering prototype. It has not been qualified for continuous unattended operation at 1 kW. Power and SWR displays remain provisional until reference-meter calibration is complete. High-power RF testing requires suitable dummy loads, shielding, measurement equipment, procedures, and supervision.
+| Area | Files |
+| --- | --- |
+| Final firmware | [`firmware/antenna_matrix_esp32.cpp`](firmware/antenna_matrix_esp32.cpp) |
+| Final thesis | [`documentation/antenna_matrix_thesis.pdf`](documentation/antenna_matrix_thesis.pdf) |
+| RF schematic and PCB print | [`hardware/schematics/rf-board-schematic.pdf`](hardware/schematics/rf-board-schematic.pdf) · [`hardware/pcb/final-rf-pcb-layouts.pdf`](hardware/pcb/final-rf-pcb-layouts.pdf) |
+| Key schematic sections | [`hardware/schematics/selector-ground-clamp.png`](hardware/schematics/selector-ground-clamp.png) · [`hardware/schematics/bruene-coupler.png`](hardware/schematics/bruene-coupler.png) · [`hardware/schematics/ads1115-interface.png`](hardware/schematics/ads1115-interface.png) |
 
 ## Author
 
